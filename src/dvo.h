@@ -197,7 +197,7 @@ namespace dvo
 			SimpleTransmitter(SimpleTransmitter<T>&& peer) : process_(peer.process_) { }
 			virtual ~SimpleTransmitter() { }
 			SimpleTransmitter& operator=(const std::function<T&(void)>& process) { process_ = process; return *this; }
-			virtual void Process() override { Send(process_()); }
+			virtual void Process() override { transmitter<T>::Send(process_()); }
 		private:
 			std::function<T&(void)> process_;
 		};
@@ -246,7 +246,7 @@ namespace dvo
 			SimpleTransceiver(SimpleTransceiver<TInput, TOutput>&& peer) : process_(peer.process_) { }
 			virtual ~SimpleTransceiver() {}
 		protected:
-			virtual void Process(TInput& value) override { Send(process_(value)); }
+			virtual void Process(TInput& value) override { transceiver<TInput, TOutput>::Send(process_(value)); }
 		private:
 			std::function<TOutput&(TInput&)> process_;
 		};
@@ -321,7 +321,7 @@ namespace dvo
 			SimpleMerger(SimpleMerger<TInX, TInY, TOutput>&& peer) : process_(peer.process_) { }
 			virtual ~SimpleMerger() {}
 		protected:
-			virtual void Process(TInX& x, TInY& y) override { Send(process_(x, y)); }
+			virtual void Process(TInX& x, TInY& y) override { merger<TInX, TInY, TOutput>::Send(process_(x, y)); }
 		private:
 			std::function<TOutput&(TInX&, TInY&)> process_;
 		};
@@ -359,7 +359,7 @@ namespace dvo
 		protected:
 			virtual void Process(TInput& value) override
 			{
-				std::tuple<TOutX&, TOutY&> values = process_(value); SendX(std::get<0>(values)); SendY(std::get<1>(values));
+				std::tuple<TOutX&, TOutY&> values = process_(value); splitter<TInput, TOutX, TOutY>::SendX(std::get<0>(values)); splitter<TInput, TOutX, TOutY>::SendY(std::get<1>(values));
 			}
 		private:
 			std::function<std::tuple<TOutX&, TOutY&>(TInput&)> process_;
