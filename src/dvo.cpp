@@ -16,12 +16,55 @@
 static void factorial_example(int);
 static int tests_ps(void);
 static void string_length_example(std::string str);
+static void readme_example(void);
 
 int main(void) {
   tests_ps();
   factorial_example(3);
   string_length_example("str");
   return 0;
+}
+
+//-------------------- Readme example --------------------------------
+struct Message{
+  std::string message;
+  int         priority;
+};
+
+struct Command{
+  int   code;
+  void* data;
+};
+
+class Interpreter : public dvo::ps::transceiver<Message, Command>{
+ public:
+  Interpreter() {}
+  virtual ~Interpreter() {}
+ protected:
+  virtual void Process(Message& message) override{
+    Command result;
+    //Do the interpreter process here
+    dvo::ps::transceiver<Message, Command>::Send(result);
+  }
+};
+
+class Executor : public dvo::ps::receiver<Command>{
+ public:
+  Executor() {}
+  virtual ~Executor() {}
+ protected:
+  virtual void Process(Command& command) override{
+    Command result;
+    //Do the executor process here
+  }
+};
+
+void readme_example(void)
+{
+  Interpreter interpreter;
+  Executor    executor;
+
+  interpreter.Output() >> executor.Input();
 }
 
 //-------------------- String length example --------------------------

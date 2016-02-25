@@ -1,1 +1,214 @@
-Sample readme file for dvo project.
+devlego
+-------
+
+1. What is it?
+-----------
+This is a toy for programmers silly enough to use it. 
+It is intended to try combining dataflow programming
+paradigm with functional programming paradigm 
+by using object-oriented programming tools.
+
+1.1. What?
+----------
+Okay, I try my best to be as serious as I can and 
+explain it as clear as I can.
+
+Object-oriented development [1] decomposes the system into entities 
+characterized by actions enclosed in reusable objects.
+Actions of an object operate on data an entity encapsulates or 
+interact with other entities by calling their actions. The overall 
+application is described by a network of interacted entities. 
+
+Dataflow programming is intended to exploit massive 
+parallelization both in software design and implementation. 
+The execution model is represented by a directed graph [2] in 
+which nodes denote operations and arcs indicate data
+dependencies. The overall program is described as a network 
+of computational elements which are perform operations on 
+data they receive and transmitting it to another one. 
+
+Functional programming paradigm is a style of 
+building an application or computer program 
+in a way that splits that a program treats 
+computation as the evaluation of mathetmatical
+functions and avoids changing-state and mutable 
+data[3]. 
+
+Lambda calculus (also written as λ-calculus) 
+is a formal system in mathematical logic for 
+expressing computation based on function 
+abstraction and application using variable 
+binding and substitution[4]. 
+
+
+1.2 So what is it?
+------------------
+Okay, okay, I got to the point, just read it towards.
+
+Although physical hardware implementations are developed [5] 
+to support the dataflow paradigm concept, due to 
+compatibility issues with already existing programs written in 
+imperative style it has not become popular [6]. Finally
+everything goes to a machine code, which is imperative style, 
+no matter what programming paradigm you use.
+
+The object-oriented programming languages, such as C#,C++, and 
+some other (no idea) are introduced lambda calculus and 
+have the ability of delegation. By using these tools 
+for an instance in C++ and creating a simple framework 
+with combining these possibilities, we can create a 
+monster using it for programming in a way of 
+functional programming paradigm in which we create 
+the operations embed and covers these operations into 
+an object, which are connectable with each other like 
+a dataflow elements. And so this is the point.  
+ 
+
+1.3. I still don't get it. What do you want?
+---------------------------------------------------
+Consider data processing service you want to implement.
+You need to process the data, interpret and perform commands.
+All these requirements can be decomposed by in a
+structural (message and command) and in a functional 
+(interpreter, executor) way. then we have something like this:
+
+ Message   .-------------. Command  .----------.
+---------->| Interpreter |--------->| Executor |
+           '-------------'          '----------'
+           
+Now imagine that a programming codes are the following:
+
+struct Message{
+  std::string message;
+  int         priority;
+};
+
+struct Command{
+  int   code;
+  void* data;
+};
+
+class Interpreter : public dvo::ps::transceiver<Message, Command>{
+ public:
+  Interpreter() {}
+  virtual ~Interpreter() {}
+ protected:
+  virtual void Process(Message& message) override{
+    Command result;
+    //Do the interpreter process here
+    dvo::ps::transceiver<Message, Command>::Send(result);
+  }
+};
+
+class Executor : public dvo::ps::receiver<Command>{
+ public:
+  Executor() {}
+  virtual ~Executor() {}
+ protected:
+  virtual void Process(Command& command) override{
+    Command result;
+    //Do the executor process here
+  }
+};
+
+void readme_example(void)
+{
+  Interpreter interpreter;
+  Executor    executor;
+
+  interpreter.Output() >> executor.Input();
+}
+
+As you see the identified structural and functional 
+elements are defined as structs and classes respectively. 
+
+Classes are inherited from dvo elements, which consists 
+basic elements for dataflow programming.In readme_example 
+you see how the elements are connected like dataflow elements.
+
+Now, We didn't do any magic just tried to simplified 
+(or at least I tried) the way of developing a scalable 
+application. 
+
+1.3.1. How functional programming comes?
+-----------------------------------------------------------------------
+Simply embed lambda calculus functions into dataflow elements, and 
+you can program your elements in functional programming paradigm,
+connect them in dataflow programming way, by using an 
+object-oriented programming.
+
+Consider the string length example:
+
+class StringLength : public dvo::ps::transceiver<const char*, int>{
+ public:
+  StringLength(){
+    process_ = [&](const char* c)->int{
+      return c[0] ? process_(c+1) + 1 : 0;
+    };
+  }
+  virtual ~StringLength() {}
+ protected:
+  virtual void Process(const char*& value) override {
+     transceiver<const char*, int>::Send(process_(value));
+    }
+ private:
+  std::function<int(const char*)> process_;
+};
+void string_length_example(std::string str)
+{
+  const char *s = str.c_str();
+  dvo::ps::SimpleReceiver<int> printer([&](int& value) { std::cout << "String length of "<< str << " is " << value << std::endl; });
+  StringLength length;
+
+  length.Output() >> printer.Input();
+  s >> length.Input();
+}
+
+Here the length of the string is calculated by using lambda calculus 
+in a way of functional programming paradigm. 
+And tadam!
+
+  
+1.3.1. You overcomplicate everything. For God's sake, what is it good for?
+-----------------------------------------------------------------------
+Yes, I do. It is intended to help for programmers to 
+
+ 
+ 
+
+It consists mathematical operation needs to implement as 
+a functional object[7] and 
+
+It needs to 
+handle variable type of incoming message. A message can be 
+a command, a request or a result to a previously sent request. 
+It receives a character string at a certain point of the program. 
+Then the message is processed based on its type determined 
+by an interpreter. Depends on the message type the application 
+may respond to it.
+
+
+
+
+
+
+
+1.2. Does anyone did it before?
+-------------------------------
+I guess the answer might be yes and no. 
+ 
+
+References
+----------
+
+[1] Booch, Grady. "Object-oriented development." Software Engineering, IEEE Transactions on 2 (1986): 211-221.
+
+[2] Culler, David E. Dataflow Architectures. No. MIT/LCS/TM-294. MASSACHUSETTS INST OF TECH CAMBRIDGE LAB FOR COMPUTER SCIENCE, 1986.
+
+[3] https://en.wikipedia.org/wiki/Functional_programming
+
+[4] https://en.wikipedia.org/wiki/Lambda_calculus
+
+[5] Sakai, Shuichi, et al. "An architecture of a dataflow single chip processor."ACM SIGARCH Computer Architecture News. Vol. 17. No.3. ACM, 1989.
+
+[6] Wail, Simon F., and David Abramson. "Can dataflow machines be programmed with an imperative language." Advanced Topics in Dataflow Computing and Multithreading (1995): 229-265.
