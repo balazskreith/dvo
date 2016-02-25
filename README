@@ -130,11 +130,13 @@ Now, We didn't do any magic just tried to simplified
 (or at least I tried) the way of developing a scalable 
 application. 
 
-1.3.1. How functional programming comes?
------------------------------------------------------------------------
-Simply embed lambda calculus functions into dataflow elements, and 
+1.3.1. How functional programming comes to this?
+------------------------------------------------
+
+With the ability of lambda calculus in C++, you can simply embed 
+lambda functions into dataflow elements defined above, and 
 you can program your elements in functional programming paradigm,
-connect them in dataflow programming way, by using an 
+connect them in dataflow programming way and by using an 
 object-oriented programming.
 
 Consider the string length example:
@@ -171,32 +173,34 @@ And tadam!
   
 1.3.1. You overcomplicate everything. For God's sake, what is it good for?
 -----------------------------------------------------------------------
-Yes, I do. It is intended to help for programmers to 
 
- 
- 
-
-It consists mathematical operation needs to implement as 
-a functional object[7] and 
-
-It needs to 
-handle variable type of incoming message. A message can be 
-a command, a request or a result to a previously sent request. 
-It receives a character string at a certain point of the program. 
-Then the message is processed based on its type determined 
-by an interpreter. Depends on the message type the application 
-may respond to it.
+Yes, I do. It is intended to help for programmers to do whatever they want,
+in any way they want.
 
 
-
-
-
-
-
-1.2. Does anyone did it before?
+1.4. Does anyone did it before?
 -------------------------------
-I guess the answer might be yes and no. 
- 
+The answer is yes. 
+
+In object-oriented development dataflow programming 
+abilities are available by using frameworks or libraries.  
+Boost dataflow- or Microsoft’s Task Parallel Library 
+are language-dependent programming toolkits available as 
+libraries. Flow-based programming (FBP) is a derived form of 
+dataflow programming proposed by Morrison et al [7]. FBP 
+frameworks are developed to major programming languages 
+such as C# or Java. Other programming toolkits and 
+frameworks exist and are used by many software systems. 
+The common concept behind the frameworks and libraries 
+is that they provide a method or structure to connect 
+computational elements arbitrary. The elements can be 
+executed parallel and thus they can be used to 
+implement a data flow graph.
+
+So you can interpret the whole things as: yet another 
+framework for dataflow programming in object-oriented 
+style.  
+
 
 References
 ----------
