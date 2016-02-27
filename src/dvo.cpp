@@ -15,13 +15,19 @@
 
 static void factorial_example(int);
 static int tests_ps(void);
+static int tests_pl(void);
 static void string_length_example(std::string str);
 static void readme_example(void);
+static void functional_examples(const std::vector<int>& integers);
+static void functional_examples2(const std::vector<double>& floats);
 
 int main(void) {
   tests_ps();
+  tests_pl();
   factorial_example(3);
   string_length_example("str");
+  functional_examples(std::vector<int>{1,2,3,4,5,6,7});
+  functional_examples2(std::vector<double>{1.1,2.2,3.3,4.4,5.5,6.6,7.7});
   return 0;
 }
 
@@ -63,11 +69,14 @@ void readme_example(void)
 {
   Interpreter interpreter;
   Executor    executor;
+  dvo::ps::asyncer<Command> asyncer;
 
-  interpreter.Output() >> executor.Input();
+  interpreter.Output() >> asyncer.Input();
+  asyncer.Output() >> executor.Input();
 }
 
 //-------------------- String length example --------------------------
+
 class StringLength : public dvo::ps::transceiver<const char*, int>{
  public:
   StringLength(){
@@ -122,6 +131,11 @@ void factorial_example(int n)
   factorialer.Output() >> printer.Input();
   n >> factorialer.Input();
 }
+
+
+//------- Squeres of integers example ------
+
+
 
 //-------------------------------------- TEST ---------------------------------
 static void test_ps_receiver(void);
@@ -244,3 +258,219 @@ void test_ps_splitter(void)
         bool test_failed = res_double != trans_double || res_int != trans_int;
         std::cout << std::setw(9) << "push-flow" << std::setw(15) << "Splitter" << std::setw(10) << (test_failed ? "NOK" : "OK") << std::endl;
 }
+
+//-------------------------------------- TEST ---------------------------------
+static void test_pl_receiver(void);
+static void test_pl_transmitter(void);
+static void test_pl_transceiver(void);
+static void test_pl_merger(void);
+static void test_pl_splitter(void);
+
+int tests_pl(void) {
+  std::cout << std::setw(9) << "Flow type" << std::setw(15) << "Element" << std::setw(10) << "Result" << std::endl;
+        test_pl_receiver();
+        test_pl_transmitter();
+        test_pl_transceiver();
+        test_pl_merger();
+        test_pl_splitter();
+        return 0;
+}
+void test_pl_receiver()
+{
+        //initiate the result and the value variables
+        int source = 1, *result;
+
+        //initiate processing elements
+        dvo::pl::SimpleReceiver<int> tester( [&](int& value) {result = &++value; });
+
+        //send the value into the network
+        std::function<int&(void)>([&](void)->int& { return source; }) << tester.Input();
+
+        //test the result
+        tester.Process();
+        bool test_failed = result != &source;
+        std::cout << std::setw(9) << "pull-flow" << std::setw(15) << "Receiver" << std::setw(10) << (test_failed ? "NOK" : "OK") << std::endl;
+}
+
+
+void test_pl_transmitter()
+{
+        //initiate the result and the value variables
+        int source = 1, *result = nullptr, *check = &source;
+
+        //initiate processing elements
+        dvo::pl::SimpleTransmitter<int> tester([&]()->int& {return source; });
+
+        //define connections
+        tester.Output() << result;
+
+        //test the result
+        bool test_failed = result != &source;
+        std::cout << std::setw(9) << "pull-flow" << std::setw(15) << "Transmitter" << std::setw(10) << (test_failed ? "NOK" : "OK") << std::endl;
+}
+
+void test_pl_transceiver()
+{
+        //initiate the result and the value variables
+        int source = 1, *result = nullptr;
+
+        //initiate processing elements
+        dvo::pl::SimpleTransceiver<int, int> tester([&](int& value)->int& { return ++value; });
+
+        //define connections
+        std::function<int&(void)>([&](void)->int& { return source; }) << tester.Input();
+
+        //request the value from the network
+        tester.Output() << result;
+
+        //test the result
+        bool test_failed = result != &source;
+        std::cout << std::setw(9) << "pull-flow" << std::setw(15) << "Transceiver" << std::setw(10) << (test_failed ? "NOK" : "OK") << std::endl;
+}
+
+
+void test_pl_merger()
+{
+        //initiate the result and the value variables
+        int something = 0;
+        int *value = new int(1), *result = &something;
+        double value2 = 2.0;
+
+        //initiate processing elements
+        dvo::pl::SimpleMerger<int, double, int> tester ( [&](int&, double&)->int& { return *value += value2; } );
+
+        //define connections
+        *value << tester.InputX();
+        value2 << tester.InputY();
+
+        tester.Output() << result;
+
+        //send the value into the network
+
+
+        //test the result
+        bool test_failed = result != value || *result != 3;
+        std::cout << std::setw(9) << "pull-flow" << std::setw(15) << "Merger" << std::setw(10) << (test_failed ? "NOK" : "OK") << std::endl;
+}
+
+
+
+void test_pl_splitter()
+{
+        //initiate the result and the value variables
+        int source, *trans_int = new int(1), *res_int;
+        double *trans_double = new double(1.0), *res_double;
+
+        //initiate processing elements
+        dvo::pl::SimpleSplitter<int, double, int> tester;
+        tester |= [&](int& v)->double& { return *trans_double += v; };
+        tester &= [&](int& v)->int& { return *trans_int += v; };
+
+        //send values to the network
+        source << tester.Input();
+        tester.OutputX() << res_double;
+        tester.OutputY() << res_int;
+
+        //test the result
+        bool test_failed = res_double != trans_double || res_int != trans_int;
+        std::cout << std::setw(9) << "pull-flow" << std::setw(15) << "Splitter" << std::setw(10) << (test_failed ? "NOK" : "OK") << std::endl;
+}
+
+
+using dvo::ps::SimpleReceiver;
+using namespace dvo::fnc;
+
+
+/*
+
+
+                                                     .-------.
+                                                     | split |
+                                                     '-------'
+                                                         |
+                          .------------------------------'-------------------------------.
+                          |                                                              |
+                      .-------.                                                          |
+                      | shift |                                                          |
+                      '-------'                                                          |
+                          |                                                              |
+                      .-------.                                                      .-------.
+                      | split |                                                      | split |
+                      '-------'                                                      '-------'
+                          |                                                              |
+                .---------'----------.                                         .---------'----------.
+                |                    |                                         |                    |
+           .--------.            .-------.                                .--------.            .-------.
+           | length |            | split |                                | length |            | split |
+           '--------'            '-------'                                '--------'            '-------'
+                |                    |                                         |                    |
+                '--------
+
+
+
+ */
+
+void functional_examples(const std::vector<int>& integers)
+{
+  print_all<int>   print_all;
+  square<int>      square;
+  filter_out<int>  odds([](int value)->bool {return value % 2 == 0;});
+
+  //create a pipeline
+  square >> odds >> print_all;
+
+  //start the process
+  integers >> square;
+
+
+
+//
+//  merge<int>          add([](int x,int y)->int {return x+y;});
+//  split<int>          split1,split2;
+//  std::vector<int>    integers{1,2,3,4,5,6,7,8,9};
+//  transform<int>      squere([](int value){ return value * value; });
+//  transform<int>      plus_one([](int value){ return value + 1; });
+//  foreach<int>        print([](int value) {std::cout << value << " "; });
+//  accumulate<int>     sum([](int sum, const int& value)->int {return sum + value;});
+//  accumulate<int>     length([](int sum, const int& value)->int {return sum + 1;});
+//  SimpleReceiver<int> print_one([](int& value) { std::cout << value << std::endl; });
+//  filter_out<int>     evens([](int value)->bool {return value % 2 == 0;});
+//  shift_first<int>    shift1, shift2;
+//
+//
+////  dvo::ps::SimpleTransceiver<std::vector<int>,std::vector<int>> squere(
+////      [&](std::vector<int>& vector)->std::vector<int>& {
+////        std::transform(vector.begin(), vector.end(), vector.begin(), [](int i){ return i*i; });
+////        return vector;
+////  });
+//
+//  squere >> print;
+//  evens >> sum >> print_one;
+//  split1.OutputX() >> squere;
+//  split1.OutputY() >> evens;
+//
+//  std::vector<int>{1,2,3,4,5,6} >> split1;
+//
+//  split2.OutputX() >> shift1 >> add.InputX();
+//  split2.OutputY() >> add.InputY();
+//  add.Output() >> print;
+//
+//  std::vector<int>{1,2,3} >> split2;
+}
+
+void functional_examples2(const std::vector<double>& floats)
+{
+  print_one<double>   print_one;
+  square<double>      square;
+  filter_out<double>  lowpass_filter([](double value)->bool {return value > 10.;});
+  sum<double>         sum;
+
+  //create a pipeline
+  square >> lowpass_filter >> sum >> print_one;
+
+  //start the process
+  floats >> square;
+}
+
+
+
