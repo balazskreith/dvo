@@ -14,6 +14,7 @@
 #include <cstdarg>
 #include <list>
 #include <algorithm>
+#include <numeric>
 
 #define DISALLOW_COPY(TypeName) \
    TypeName(const TypeName&)
@@ -348,6 +349,7 @@ namespace dvo
 			plug<TOutX> outx_;
 			plug<TOutY> outy_;
 		};
+
 		//------------------------------------------------------------------------
 		template<typename TInput, typename TOutX, typename TOutY>
 		class SimpleSplitter : public splitter<TInput, TOutX, TOutY> {
@@ -365,115 +367,6 @@ namespace dvo
 		private:
 			std::function<std::tuple<TOutX&, TOutY&>(TInput&)> process_;
 		};
-
-		//-----------------------------------------------------------------
-		/*
-		template<typename TKey, typename TInput, typename TOutput> class joiner {
-		public:
-			joiner();
-			virtual ~joiner();
-			std::function<void(TInput&)> Inputs(const TKey& key);
-			void Remove(const TKey& key);
-			plug<TOutput>& Output() { return output_; }
-		protected:
-			virtual void Process(std::map<TKey, TInput*>& values) = 0;
-			inline void Send(TOutput& value) { output_.Transmit(value); }
-			virtual void Receive(const TKey& key, TInput& value);
-			std::map<TKey, TInput*>& GetAll();
-		private:
-			plug<TOutput> output_;
-			std::map<TKey, socket<TKey, TInput>> sockets_;
-			std::map<TKey, std::unique_ptr<std::condition_variable>> cvs_;
-			std::map<TKey, std::atomic_int> waits_;
-			std::map<TKey, TInput*> values_;
-			std::size_t arrived_;
-			std::size_t limit_;
-			std::mutex mutex_;
-		};
-
-		template<typename TKey, typename TInput, typename TOutput>
-		joiner<TKey, TInput, TOutput>::joiner() : limit_(0), arrived_(0)
-		{
-
-		}
-
-		template<typename TKey, typename TInput, typename TOutput>
-		std::function<void(TInput&)> joiner<TKey, TInput, TOutput>::Inputs(const TKey& key)
-		{
-			std::map<TKey, socket<TKey, TInput>>::iterator it = sockets_.find(key);
-			if (it != sockets_.end()) {
-				return (it->second)();
-			}
-			++limit_;
-			sockets_.emplace(key, socket<TKey, TInput>(key, std::bind(&joiner<TKey, TInput, TOutput>::Receive, this, std::placeholders::_1, std::placeholders::_2)));
-			cvs_.emplace(key, std::unique_ptr<std::condition_variable>(new std::condition_variable()));
-			waits_.emplace(key, std::atomic_int());
-			return (sockets_.at(key))();
-		}
-
-		template<typename TKey, typename TInput, typename TOutput>
-		void joiner<TKey, TInput, TOutput>::Remove(const TKey& key)
-		{
-			map<TKey, socket<TKey, TInput>>::iterator it = sockets_.find(key);
-			if (it == sockets_.end()) {
-				return;
-			}
-			--limit_;
-			sockets_.erase(it);
-			cvs_.erase(key);
-			waits_.erase(key);
-		}
-
-		template<typename TKey, typename TInput, typename TOutput>
-		void joiner<TKey, TInput, TOutput>::Receive(const TKey& key, TInput& value)
-		{
-			std::unique_lock<std::mutex> mutex(mutex_);
-			std::map<TKey, TInput*>::iterator it = values_.find(key);
-			if (it != values_.end()) {
-				++waits_.at(key);
-				cvs_.at(key)->wait(mutex);
-			}
-			values_.emplace(key, &value);
-			if (++arrived_ < limit_) {
-				return;
-			}
-			arrived_ = 0;
-			std::map<TKey, TInput*> values;
-			values.swap(values_);
-			Process(values);
-
-			for (std::pair<const TKey, std::atomic_int>& pair : waits_) {
-				if (pair.second < 1) {
-					continue;
-				}
-				cvs_.at(pair.first)->notify_one();
-				--pair.second;
-			}
-
-		}
-
-		template<typename TKey, typename TInput, typename TOutput>
-		joiner<TKey, TInput, TOutput>::~joiner()
-		{
-
-		}
-		//---------------------------------------------------------------------------------
-		template<typename TKey, typename TInput, typename TOutput>
-		class SimpleJoiner : public joiner< TKey, TInput, TOutput > {
-		public:
-			SimpleJoiner() {}
-			SimpleJoiner(const std::function<TOutput&(std::map<TKey, TInput*>&)>& process) { process_ = process; }
-			SimpleJoiner(SimpleJoiner<TKey, TInput, TOutput>& peer) : joiner<TKey, TInput, TOutput>::joiner(peer), process_(peer.process_) { }
-			SimpleJoiner(SimpleJoiner<TKey, TInput, TOutput>&& peer) : joiner<TKey, TInput, TOutput>::joiner(peer), process_(peer.process_) { }
-			virtual ~SimpleJoiner() {}
-			SimpleJoiner& operator=(const std::function<TOutput&(std::map<TKey, TInput*>&)>& process) { process_ = process; return *this; }
-			std::function<void(TInput&)> operator()(const TKey& key) { return Inputs(key); }
-		protected:
-			virtual void Process(std::map<TKey, TInput*>& values) override { Send(process_(values)); }
-		private:
-			std::function<TOutput&(std::map<TKey, TInput*>&)> process_;
-		};
-		/**/
 
 		//---------------------------------------------------------------------------------
 		template<typename TKey, typename TInput, typename TOutput>
@@ -819,237 +712,236 @@ namespace dvo
 	}//end of namespace ps
 
 	namespace pl
-        {
-                template<typename T>
-                class isimplex {
-                public:
-                        isimplex() {}
-                        virtual ~isimplex() {};
-                        virtual T& Request() = 0;
-                };
+  {
+          template<typename T>
+          class isimplex {
+          public:
+                  isimplex() {}
+                  virtual ~isimplex() {};
+                  virtual T& Request() = 0;
+          };
 
-                template<typename T>
-                class plug : public isimplex<T> {
-                public:
-                        plug() {}
-                        plug(plug<T>& peer) : target_(peer.target_) {};
-                        plug(plug<T>&& peer) : target_(peer.target_) {};
-                        virtual ~plug() {}
-                        inline plug<T>& operator<<(std::function<T&(void)> target) { target_ = target; return *this; }
-                        virtual T& Request() { return target_(); }
-                        inline void Connect(const std::function<T&(void)>& target) { target_ = target; }
-                private:
-                        std::function<T&(void)> target_;
-                };
+          template<typename T>
+          class plug : public isimplex<T> {
+          public:
+                  plug() {}
+                  plug(plug<T>& peer) : target_(peer.target_) {};
+                  plug(plug<T>&& peer) : target_(peer.target_) {};
+                  virtual ~plug() {}
+                  inline plug<T>& operator<<(std::function<T&(void)> target) { target_ = target; return *this; }
+                  virtual T& Request() { return target_(); }
+                  inline void Connect(const std::function<T&(void)>& target) { target_ = target; }
+          private:
+                  std::function<T&(void)> target_;
+          };
 
-                template<typename T>
-                void operator<<(T&(*fptr)(void), dvo::pl::plug<T>& target) {
-                        std::function<T&(void)>(fptr) << target;
-                }
+          template<typename T>
+          void operator<<(T&(*fptr)(void), dvo::pl::plug<T>& target) {
+                  std::function<T&(void)>(fptr) << target;
+          }
 
-                template<typename TKey, typename TValue>
-                class socket {
-                public:
-                        socket() {}
-                        socket(const TKey& key, const std::function<TValue&(const TKey& key)>& target) : key_(key), target_(target) {}
-                        socket(socket<TKey, TValue>& peer) : target_(peer.target_), key_(peer.key_) {}
-                        socket(socket<TKey, TValue>&& peer) : target_(peer.target_), key_(peer.key_) {}
-                        std::function<TValue&(void)> operator()() { return std::bind(&socket<TKey, TValue>::Process, this); }
-                        virtual ~socket() {  }
-                protected:
-                        TValue& Process() { return target_(key_); }
-                private:
-                        TKey key_;
-                        std::function<TValue&(const TKey& key)> target_;
-                };
+          template<typename TKey, typename TValue>
+          class socket {
+          public:
+                  socket() {}
+                  socket(const TKey& key, const std::function<TValue&(const TKey& key)>& target) : key_(key), target_(target) {}
+                  socket(socket<TKey, TValue>& peer) : target_(peer.target_), key_(peer.key_) {}
+                  socket(socket<TKey, TValue>&& peer) : target_(peer.target_), key_(peer.key_) {}
+                  std::function<TValue&(void)> operator()() { return std::bind(&socket<TKey, TValue>::Process, this); }
+                  virtual ~socket() {  }
+          protected:
+                  TValue& Process() { return target_(key_); }
+          private:
+                  TKey key_;
+                  std::function<TValue&(const TKey& key)> target_;
+          };
 
-                //----------------------------------------------------------------------------------
-                template<typename T>
-                class receiver {
-                public:
-                        receiver();
-                        receiver(receiver<T>& peer) {}
-                        receiver(receiver<T>&& peer) {}
-                        virtual ~receiver();
-                        inline plug<T>& Input() { return input_; }
-                        virtual void Process() = 0;
-                protected:
-                        inline T& Demand() { return input_.Request(); }
-                private:
-                        plug<T> input_;
-                };
+          //----------------------------------------------------------------------------------
+          template<typename T>
+          class receiver {
+          public:
+                  receiver();
+                  receiver(receiver<T>& peer) {}
+                  receiver(receiver<T>&& peer) {}
+                  virtual ~receiver();
+                  inline plug<T>& Input() { return input_; }
+                  virtual void Process() = 0;
+          protected:
+                  inline T& Demand() { return input_.Request(); }
+          private:
+                  plug<T> input_;
+          };
 
-                template<typename T>
-                receiver<T>::receiver()
-                {
+          template<typename T>
+          receiver<T>::receiver()
+          {
 
-                }
+          }
 
-                template<typename T>
-                receiver<T>::~receiver()
-                {
+          template<typename T>
+          receiver<T>::~receiver()
+          {
 
-                }
-                //--------------------------------------------------------------------------------
-                template<typename T>
-                void operator<<(const std::function<T&(void)>& source, dvo::pl::plug<T>& target)
-                {
-                        target.Connect(source);
-                }
-                //---------------------------------------------------------------------------------
-                template<typename T>
-                class SimpleReceiver : public receiver<T>
-                {
-                public:
-                        SimpleReceiver(std::function<void(T&)> process) { process_ = process; }
-                        SimpleReceiver(SimpleReceiver<T>& peer) : process_(peer.process_) { }
-                        SimpleReceiver(SimpleReceiver<T>&& peer) : process_(peer.process_) { }
-                        virtual ~SimpleReceiver() {}
-                        SimpleReceiver& operator=(const std::function<void(T&)>& process) { process_ = process; return *this; }
-                        virtual void Process() override { process_(receiver<T>::Demand()); }
-                private:
-                        std::function<void(T&)> process_;
-                };
-                //---------------------------------------------------------------------------------
-                template<typename T> class transmitter {
-                public:
-                        transmitter() {}
-                        transmitter(transmitter<T>& peer) {}
-                        transmitter(transmitter<T>&& peer) {}
-                        virtual ~transmitter() {}
-                        std::function<T&(void)> Output() { return std::bind(&transmitter<T>::Process, this); }
-                protected:
-                        virtual T& Process() = 0;
-                };
+          }
+          //--------------------------------------------------------------------------------
+          template<typename T>
+          void operator<<(const std::function<T&(void)>& source, dvo::pl::plug<T>& target)
+          {
+                  target.Connect(source);
+          }
+          //---------------------------------------------------------------------------------
+          template<typename T>
+          class SimpleReceiver : public receiver<T>
+          {
+          public:
+                  SimpleReceiver(std::function<void(T&)> process) { process_ = process; }
+                  SimpleReceiver(SimpleReceiver<T>& peer) : process_(peer.process_) { }
+                  SimpleReceiver(SimpleReceiver<T>&& peer) : process_(peer.process_) { }
+                  virtual ~SimpleReceiver() {}
+                  SimpleReceiver& operator=(const std::function<void(T&)>& process) { process_ = process; return *this; }
+                  virtual void Process() override { process_(receiver<T>::Demand()); }
+          private:
+                  std::function<void(T&)> process_;
+          };
+          //---------------------------------------------------------------------------------
+          template<typename T> class transmitter {
+          public:
+                  transmitter() {}
+                  transmitter(transmitter<T>& peer) {}
+                  transmitter(transmitter<T>&& peer) {}
+                  virtual ~transmitter() {}
+                  std::function<T&(void)> Output() { return std::bind(&transmitter<T>::Process, this); }
+          protected:
+                  virtual T& Process() = 0;
+          };
 
-                //---------------------------------------------------------------------------------
-                template<typename T>
-                class SimpleTransmitter : public transmitter<T>
-                {
-                public:
-                        SimpleTransmitter(SimpleTransmitter<T>& peer) : process_(peer.process_) { }
-                        SimpleTransmitter& operator=(const std::function<T&(void)>& process) { process_ = process; return *this; }
-                        SimpleTransmitter(const std::function<T&(void)>& process) { process_ = process; }
-                        virtual ~SimpleTransmitter() {}
-                protected:
-                        virtual T& Process() override { return process_(); }
-                private:
-                        std::function<T&(void)> process_;
-                };
-                //---------------------------------------------------------------------------------
-                template<typename TInput, typename TOutput> class transceiver {
-                public:
-                        transceiver() {}
-                        transceiver(transceiver<TInput, TOutput>& peer) : input_(peer.input_) {};
-                        transceiver(transceiver<TInput, TOutput>&& peer) : input_(peer.input_) {};
-                        virtual ~transceiver() {}
-                        plug<TInput>& Input() { return input_; }
-                        inline std::function<TOutput&(void)> Output() { return std::bind(&transceiver<TInput, TOutput>::Process, this); }
-                protected:
-                        inline TInput& Demand() { return input_.Request(); }
-                        virtual TOutput& Process() = 0;
-                private:
-                        plug<TInput> input_;
-                };
+          //---------------------------------------------------------------------------------
+          template<typename T>
+          class SimpleTransmitter : public transmitter<T>
+          {
+          public:
+                  SimpleTransmitter(SimpleTransmitter<T>& peer) : process_(peer.process_) { }
+                  SimpleTransmitter& operator=(const std::function<T&(void)>& process) { process_ = process; return *this; }
+                  SimpleTransmitter(const std::function<T&(void)>& process) { process_ = process; }
+                  virtual ~SimpleTransmitter() {}
+          protected:
+                  virtual T& Process() override { return process_(); }
+          private:
+                  std::function<T&(void)> process_;
+          };
+          //---------------------------------------------------------------------------------
+          template<typename TInput, typename TOutput> class transceiver {
+          public:
+                  transceiver() {}
+                  transceiver(transceiver<TInput, TOutput>& peer) : input_(peer.input_) {};
+                  transceiver(transceiver<TInput, TOutput>&& peer) : input_(peer.input_) {};
+                  virtual ~transceiver() {}
+                  plug<TInput>& Input() { return input_; }
+                  inline std::function<TOutput&(void)> Output() { return std::bind(&transceiver<TInput, TOutput>::Process, this); }
+          protected:
+                  inline TInput& Demand() { return input_.Request(); }
+                  virtual TOutput& Process() = 0;
+          private:
+                  plug<TInput> input_;
+          };
 
-                //---------------------------------------------------------------------------------
-                template<typename TInput, typename TOutput>
-                class SimpleTransceiver : public transceiver<TInput, TOutput>
-                {
-                public:
-                        SimpleTransceiver() {}
-                        SimpleTransceiver(SimpleTransceiver<TInput, TOutput>& peer) : process_(peer.process_) { }
-                        SimpleTransceiver(SimpleTransceiver<TInput, TOutput>&& peer) : process_(peer.process_) { }
-                        SimpleTransceiver& operator=(const std::function<TOutput&(TInput&)>& process) { process_ = process; return *this; }
-                        SimpleTransceiver(const std::function<TOutput&(TInput&)>& process) { process_ = process; }
-                        virtual ~SimpleTransceiver() {}
-                protected:
-                        virtual TOutput& Process() override { return process_(transceiver<TInput, TOutput>::Demand()); }
-                private:
-                        std::function<TOutput&(TInput&)> process_;
-                };
+          //---------------------------------------------------------------------------------
+          template<typename TInput, typename TOutput>
+          class SimpleTransceiver : public transceiver<TInput, TOutput>
+          {
+          public:
+                  SimpleTransceiver() {}
+                  SimpleTransceiver(SimpleTransceiver<TInput, TOutput>& peer) : process_(peer.process_) { }
+                  SimpleTransceiver(SimpleTransceiver<TInput, TOutput>&& peer) : process_(peer.process_) { }
+                  SimpleTransceiver& operator=(const std::function<TOutput&(TInput&)>& process) { process_ = process; return *this; }
+                  SimpleTransceiver(const std::function<TOutput&(TInput&)>& process) { process_ = process; }
+                  virtual ~SimpleTransceiver() {}
+          protected:
+                  virtual TOutput& Process() override { return process_(transceiver<TInput, TOutput>::Demand()); }
+          private:
+                  std::function<TOutput&(TInput&)> process_;
+          };
 
-                //----------------------------------------------------------------------
-                template<typename TInputX, typename TInputY, typename TOutput>
-                class merger
-                {
-                public:
-                        merger() {}
-                        merger(merger<TInputX, TInputY, TOutput>& peer) : inputx_(peer.inputx_),inputy_(peer.inputy_)  { }
-                        merger(merger<TInputX, TInputY, TOutput>&& peer) : inputx_(peer.inputx_),inputy_(peer.inputy_) { }
-                        virtual ~merger() {}
-                        inline plug<TInputX>& InputX() { return inputx_; }
-                        inline plug<TInputY>& InputY() { return inputy_; }
-                        inline std::function<TOutput&(void)> Output() { return std::bind(&merger<TInputX, TInputY, TOutput>::Process, this); }
-                protected:
-                        inline TInputX& DemandX() { return  inputx_.Request(); }
-                        inline TInputY& DemandY() { return  inputy_.Request(); }
-                        virtual TOutput& Process() = 0;
-                private:
-                        plug<TInputX> inputx_;
-                        plug<TInputY> inputy_;
-                };
+          //----------------------------------------------------------------------
+          template<typename TInputX, typename TInputY, typename TOutput>
+          class merger
+          {
+          public:
+                  merger() {}
+                  merger(merger<TInputX, TInputY, TOutput>& peer) : inputx_(peer.inputx_),inputy_(peer.inputy_)  { }
+                  merger(merger<TInputX, TInputY, TOutput>&& peer) : inputx_(peer.inputx_),inputy_(peer.inputy_) { }
+                  virtual ~merger() {}
+                  inline plug<TInputX>& InputX() { return inputx_; }
+                  inline plug<TInputY>& InputY() { return inputy_; }
+                  inline std::function<TOutput&(void)> Output() { return std::bind(&merger<TInputX, TInputY, TOutput>::Process, this); }
+          protected:
+                  inline TInputX& DemandX() { return  inputx_.Request(); }
+                  inline TInputY& DemandY() { return  inputy_.Request(); }
+                  virtual TOutput& Process() = 0;
+          private:
+                  plug<TInputX> inputx_;
+                  plug<TInputY> inputy_;
+          };
 
-                //---------------------------------------------------------------------------------
-                template<typename TInputX, typename TInputY, typename TOutput>
-                class SimpleMerger : public merger<TInputX, TInputY, TOutput>
-                {
-                public:
-                        SimpleMerger() { }
-                        SimpleMerger(SimpleMerger<TInputX, TInputY, TOutput>& peer) : process_(peer.process_) { }
-                        SimpleMerger(SimpleMerger<TInputX, TInputY, TOutput>&& peer) : process_(peer.process_) { }
-                        SimpleMerger& operator=(const std::function<TOutput&(TInputX&, TInputY&)>& process) { process_ = process; return *this; }
-                        SimpleMerger(const std::function<TOutput&(TInputX&, TInputY&)>& process) { process_ = process; }
-                        virtual ~SimpleMerger() { }
-                protected:
-                        virtual TOutput& Process() override { return process_(merger<TInputX, TInputY, TOutput>::DemandX(), merger<TInputX, TInputY, TOutput>::DemandY()); }
-                private:
-                        std::function<TOutput&(TInputX&, TInputY&)> process_;
-                };
+          //---------------------------------------------------------------------------------
+          template<typename TInputX, typename TInputY, typename TOutput>
+          class SimpleMerger : public merger<TInputX, TInputY, TOutput>
+          {
+          public:
+                  SimpleMerger() { }
+                  SimpleMerger(SimpleMerger<TInputX, TInputY, TOutput>& peer) : process_(peer.process_) { }
+                  SimpleMerger(SimpleMerger<TInputX, TInputY, TOutput>&& peer) : process_(peer.process_) { }
+                  SimpleMerger& operator=(const std::function<TOutput&(TInputX&, TInputY&)>& process) { process_ = process; return *this; }
+                  SimpleMerger(const std::function<TOutput&(TInputX&, TInputY&)>& process) { process_ = process; }
+                  virtual ~SimpleMerger() { }
+          protected:
+                  virtual TOutput& Process() override { return process_(merger<TInputX, TInputY, TOutput>::DemandX(), merger<TInputX, TInputY, TOutput>::DemandY()); }
+          private:
+                  std::function<TOutput&(TInputX&, TInputY&)> process_;
+          };
 
-                //----------------------------------------------------------------------
-                template<typename TInput, typename TOutputX, typename TOutputY>
-                class splitter
-                {
-                public:
-                        splitter() {}
-                        splitter(splitter<TInput, TOutputX, TOutputY>& peer) : input_(peer.input_) { }
-                        splitter(splitter<TInput, TOutputX, TOutputY>&& peer) : input_(peer.input_) { }
-                        virtual ~splitter() {}
-                        inline plug<TInput>& Input() { return input_; }
-                        inline std::function<TOutputX&(void)> OutputX() { return std::bind(&splitter<TInput, TOutputX, TOutputY>::ProcessX, this); }
-                        inline std::function<TOutputY&(void)> OutputY() { return std::bind(&splitter<TInput, TOutputX, TOutputY>::ProcessY, this); }
-                protected:
-                        inline TInput& Demand() { return  input_.Request(); }
-                        virtual TOutputX& ProcessX() = 0;
-                        virtual TOutputY& ProcessY() = 0;
-                private:
-                        plug<TInput> input_;
-                };
-                //---------------------------------------------------------------------------------
-                template<typename TInput, typename TOutputX, typename TOutputY>
-                class SimpleSplitter : public splitter<TInput, TOutputX, TOutputY>
-                {
-                public:
-                        SimpleSplitter() { }
-                        SimpleSplitter(SimpleSplitter<TInput, TOutputX, TOutputY>& peer) : processx_(peer.processx_),processy_(peer.processy_) { }
-                        SimpleSplitter(SimpleSplitter<TInput, TOutputX, TOutputY>&& peer) : processx_(peer.processx_),processy_(peer.processy_) { }
-                        virtual ~SimpleSplitter() { }
-                        SimpleSplitter& operator|=(const std::function<TOutputX&(TInput&)>& processx) { processx_ = processx; return *this; }
-                        SimpleSplitter& operator&=(const std::function<TOutputY&(TInput&)>& processy) { processy_ = processy; return *this; }
-                        inline void SetProcessY(const std::function<TOutputY&(TInput&)>& processy) { processy_ = processy; }
-                protected:
-                        virtual TOutputX& ProcessX() override { return processx_(splitter<TInput, TOutputX, TOutputY>::Demand()); }
-                        virtual TOutputY& ProcessY() override { return processy_(splitter<TInput, TOutputX, TOutputY>::Demand()); }
-                private:
-                        std::function<TOutputX&(TInput&)> processx_;
-                        std::function<TOutputY&(TInput&)> processy_;
-                };
-        }//end of namespace pl
+          //----------------------------------------------------------------------
+          template<typename TInput, typename TOutputX, typename TOutputY>
+          class splitter
+          {
+          public:
+                  splitter() {}
+                  splitter(splitter<TInput, TOutputX, TOutputY>& peer) : input_(peer.input_) { }
+                  splitter(splitter<TInput, TOutputX, TOutputY>&& peer) : input_(peer.input_) { }
+                  virtual ~splitter() {}
+                  inline plug<TInput>& Input() { return input_; }
+                  inline std::function<TOutputX&(void)> OutputX() { return std::bind(&splitter<TInput, TOutputX, TOutputY>::ProcessX, this); }
+                  inline std::function<TOutputY&(void)> OutputY() { return std::bind(&splitter<TInput, TOutputX, TOutputY>::ProcessY, this); }
+          protected:
+                  inline TInput& Demand() { return  input_.Request(); }
+                  virtual TOutputX& ProcessX() = 0;
+                  virtual TOutputY& ProcessY() = 0;
+          private:
+                  plug<TInput> input_;
+          };
+          //---------------------------------------------------------------------------------
+          template<typename TInput, typename TOutputX, typename TOutputY>
+          class SimpleSplitter : public splitter<TInput, TOutputX, TOutputY>
+          {
+          public:
+                  SimpleSplitter() { }
+                  SimpleSplitter(SimpleSplitter<TInput, TOutputX, TOutputY>& peer) : processx_(peer.processx_),processy_(peer.processy_) { }
+                  SimpleSplitter(SimpleSplitter<TInput, TOutputX, TOutputY>&& peer) : processx_(peer.processx_),processy_(peer.processy_) { }
+                  virtual ~SimpleSplitter() { }
+                  SimpleSplitter& operator|=(const std::function<TOutputX&(TInput&)>& processx) { processx_ = processx; return *this; }
+                  SimpleSplitter& operator&=(const std::function<TOutputY&(TInput&)>& processy) { processy_ = processy; return *this; }
+                  inline void SetProcessY(const std::function<TOutputY&(TInput&)>& processy) { processy_ = processy; }
+          protected:
+                  virtual TOutputX& ProcessX() override { return processx_(splitter<TInput, TOutputX, TOutputY>::Demand()); }
+                  virtual TOutputY& ProcessY() override { return processy_(splitter<TInput, TOutputX, TOutputY>::Demand()); }
+          private:
+                  std::function<TOutputX&(TInput&)> processx_;
+                  std::function<TOutputY&(TInput&)> processy_;
+          };
+  }//end of namespace pl
 
 
-    namespace fnc{ //functional elements
-
+namespace fnc{ //functional elements
 	template<typename T>
 	class transform : public dvo::ps::transceiver<std::vector<T>, std::vector<T>>{
 	  public:
@@ -1068,39 +960,38 @@ namespace dvo
 	   std::function<T(T)> transform_process_;
 	};
 
-        template<typename T>
-        class foreach : public dvo::ps::receiver<std::vector<T>>{
-          public:
-          foreach(std::function<void(T)> process) : process_(process) {}
-           virtual ~foreach(){}
-          protected:
-           virtual void Process(std::vector<T>& vector){
-             std::for_each(
-                 vector.begin(),
-                 vector.end(),
-                 [&](T i){ process_(i); });
-           }
-          private:
-           std::function<void(T)> process_;
-        };
+  template<typename T>
+  class foreach : public dvo::ps::receiver<std::vector<T>>{
+    public:
+    foreach(std::function<void(T)> process) : process_(process) {}
+     virtual ~foreach(){}
+    protected:
+     virtual void Process(std::vector<T>& vector){
+       std::for_each(
+           vector.begin(),
+           vector.end(),
+           [&](T i){ process_(i); });
+     }
+    private:
+     std::function<void(T)> process_;
+  };
 
-        template<typename T>
-        class foreach_pass : public dvo::ps::transceiver<std::vector<T>,std::vector<T>>{
-          public:
-          foreach_pass(std::function<void(T)> process) : process_(process) {}
-           virtual ~foreach_pass(){}
-          protected:
-           virtual void Process(std::vector<T>& vector){
-             std::for_each(
-                 vector.begin(),
-                 vector.end(),
-                 [&](T i){ process_(i); });
-             dvo::ps::transceiver<std::vector<T>,std::vector<T>>::Send(vector);
-           }
-          private:
-           std::function<void(T)> process_;
-        };
-
+  template<typename T>
+  class foreach_pass : public dvo::ps::transceiver<std::vector<T>,std::vector<T>>{
+    public:
+    foreach_pass(std::function<void(T)> process) : process_(process) {}
+     virtual ~foreach_pass(){}
+    protected:
+     virtual void Process(std::vector<T>& vector){
+       std::for_each(
+           vector.begin(),
+           vector.end(),
+           [&](T i){ process_(i); });
+       dvo::ps::transceiver<std::vector<T>,std::vector<T>>::Send(vector);
+     }
+    private:
+     std::function<void(T)> process_;
+  };
 
 	template<typename T>
 	class filter_out : public dvo::ps::transceiver<std::vector<T>,std::vector<T>>{
@@ -1127,17 +1018,15 @@ namespace dvo
 	     T result;
 	     result =
 	         std::accumulate(
-	         vector.begin(),
-	         vector.end(),
-	         T(),
-	         process_);
+  	         vector.begin(),
+  	         vector.end(),
+  	         T(),
+  	         process_);
 	     dvo::ps::transceiver<std::vector<T>, T>::Send(result);
 	   }
 	  private:
 	   std::function<T(T, const T&)> process_;
 	};
-
-
 
 	template<typename T>
 	class split : public dvo::ps::splitter<std::vector<T>, std::vector<T>,  std::vector<T>>{
@@ -1214,61 +1103,61 @@ namespace dvo
 	  virtual ~product() {}
 	};
 
-        template<typename T>
-        class product_one : public dvo::ps::SimpleMerger<T,T,T>{
-         public:
-          product_one() : dvo::ps::SimpleMerger<T,T,T>::SimpleMerger([](T& x,T& y)->T {return x*y;}) {}
-          virtual ~product_one() {}
-        };
+  template<typename T>
+  class product_one : public dvo::ps::SimpleMerger<T,T,T>{
+   public:
+    product_one() : dvo::ps::SimpleMerger<T,T,T>::SimpleMerger([](T& x,T& y)->T {return x*y;}) {}
+    virtual ~product_one() {}
+  };
 
-        template<typename T>
-        class length : public accumulate<T>{
-         public:
-          length() : accumulate<T>::accumulate([](T len,const T& item)->T {return len+1;}) {}
-          virtual ~length() {}
-        };
+  template<typename T>
+  class length : public accumulate<T>{
+   public:
+    length() : accumulate<T>::accumulate([](T len,const T& item)->T {return len+1;}) {}
+    virtual ~length() {}
+  };
 
-        template<typename T>
-        class sum : public accumulate<T>{
-         public:
-          sum() : accumulate<T>::accumulate([](T sum, const T& value)->T {return sum + value;}) {}
-          virtual ~sum() {}
-        };
+  template<typename T>
+  class sum : public accumulate<T>{
+   public:
+    sum() : accumulate<T>::accumulate([](T sum, const T& value)->T {return sum + value;}) {}
+    virtual ~sum() {}
+  };
 
-        template<typename T>
-        class print_one : public dvo::ps::receiver<T>{
-        public:
-          print_one() {}
-          virtual ~print_one() {}
-        protected:
-          virtual void Process(T& value) override{
-            std::cout << value << std::endl;
-          }
-        };
+  template<typename T>
+  class print_one : public dvo::ps::receiver<T>{
+  public:
+    print_one() {}
+    virtual ~print_one() {}
+  protected:
+    virtual void Process(T& value) override{
+      std::cout << value << std::endl;
+    }
+  };
 
-        template<typename T>
-        class print_all : public foreach<T>{
-        public:
-          print_all() : separator_(" "), end_("\n"),
+  template<typename T>
+  class print_all : public foreach<T>{
+  public:
+    print_all() : separator_(" "), end_("\n"),
+                  foreach<T>::foreach([&](T value) {std::cout << value << separator_; }) {  }
+    print_all(const std::string& separator)
+                      : separator_(separator),
+                        end_("\n"),
                         foreach<T>::foreach([&](T value) {std::cout << value << separator_; }) {  }
-          print_all(const std::string& separator)
-                            : separator_(separator),
-                              end_("\n"),
-                              foreach<T>::foreach([&](T value) {std::cout << value << separator_; }) {  }
-          print_all(const std::string& separator, const std::string& end)
-            : separator_(separator),
-              end_(end),
-              foreach<T>::foreach([&](T value) {std::cout << value << separator_; }) {  }
-          virtual ~print_all() {}
-        protected:
-          virtual void Process(std::vector<T>& vector) override{
-            foreach<T>::Process(vector);
-            std::cout << end_;
-          }
-        private:
-          std::string separator_;
-          std::string end_;
-        };
+    print_all(const std::string& separator, const std::string& end)
+      : separator_(separator),
+        end_(end),
+        foreach<T>::foreach([&](T value) {std::cout << value << separator_; }) {  }
+    virtual ~print_all() {}
+  protected:
+    virtual void Process(std::vector<T>& vector) override{
+      foreach<T>::Process(vector);
+      std::cout << end_;
+    }
+  private:
+    std::string separator_;
+    std::string end_;
+  };
 
 	template<typename T>
 	class add : public merge<T>{
@@ -1277,19 +1166,19 @@ namespace dvo
 	  virtual ~add() {}
 	};
 
-        template<typename T>
-        class div : public merge<T>{
-         public:
-          div() : merge<T>::merge([](T x,T y)->T {return x/y;}) {}
-          virtual ~div() {}
-        };
+  template<typename T>
+  class div : public merge<T>{
+   public:
+    div() : merge<T>::merge([](T x,T y)->T {return x/y;}) {}
+    virtual ~div() {}
+  };
 
-        template<typename T>
-        class div_one : public dvo::ps::SimpleMerger<T,T,T>{
-         public:
-          div_one() : dvo::ps::SimpleMerger<T,T,T>::SimpleMerger([](T& x,T& y)->T {return x/y;}) {}
-          virtual ~div_one() {}
-        };
+  template<typename T>
+  class div_one : public dvo::ps::SimpleMerger<T,T,T>{
+   public:
+    div_one() : dvo::ps::SimpleMerger<T,T,T>::SimpleMerger([](T& x,T& y)->T {return x/y;}) {}
+    virtual ~div_one() {}
+  };
 
 	template<typename T>
 	filter_out<T>& operator>>(transform<T>& src, filter_out<T>& dst)

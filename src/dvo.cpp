@@ -31,6 +31,10 @@ int main(void) {
   return 0;
 }
 
+
+
+
+
 //-------------------- Readme example --------------------------------
 struct Message{
   std::string message;
@@ -41,6 +45,7 @@ struct Command{
   int   code;
   void* data;
 };
+
 
 class Interpreter : public dvo::ps::transceiver<Message, Command>{
  public:
@@ -74,6 +79,7 @@ void readme_example(void)
   interpreter.Output() >> asyncer.Input();
   asyncer.Output() >> executor.Input();
 }
+
 
 //-------------------- String length example --------------------------
 
